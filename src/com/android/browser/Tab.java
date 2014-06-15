@@ -18,11 +18,14 @@ package com.android.browser;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnCancelListener;
+import android.content.DialogInterface.OnClickListener;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
@@ -75,6 +78,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.text.DecimalFormat;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.UUID;
@@ -188,6 +192,9 @@ class Tab implements PictureListener {
     private Bitmap mCapture;
     private Handler mHandler;
     private boolean mUpdateThumbnail;
+
+    // size formatter
+    DecimalFormat mSizeFomatter;
 
     /**
      * See {@link #clearBackStackWhenItemAdded(String)}.
@@ -1090,15 +1097,44 @@ class Tab implements PictureListener {
                 ? w.isPrivateBrowsingEnabled() : false);
         mInPageLoad = false;
         mInForeground = false;
+        mSizeFomatter = new DecimalFormat("0.00MB");
 
         mDownloadListener = new BrowserDownloadListener() {
             public void onDownloadStart(String url, String userAgent,
                     String contentDisposition, String mimetype, String referer,
                     long contentLength) {
-                mWebViewController.onDownloadStart(Tab.this, url, userAgent, contentDisposition,
-                        mimetype, referer, contentLength);
+                final Resources res = mContext.getResources();
+                final String tmpUrl = url;
+                final String tmpUserAgent = userAgent;
+                final String tmpContentDisposition = contentDisposition;
+                final String tmpMimeType = mimetype;
+                final String tmpReferer = referer;
+                final long tmpContentLength = contentLength;
+
+                String targetName = URLUtil.guessFileName(url, contentDisposition, mimetype);
+
+                String targetSize = mSizeFomatter.format((double)tmpContentLength / 1048576d);
+
+                new AlertDialog.Builder(mContext)
+                        .setTitle(res.getString(R.string.confirm_download_title))
+                        .setMessage(res.getString(R.string.confirm_download_message,
+                                targetName, targetSize))
+                        .setPositiveButton(res.getString(R.string.ok),
+                                new OnClickListener() {
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        if (which == DialogInterface.BUTTON_POSITIVE) {
+                                            mWebViewController.onDownloadStart(Tab.this, tmpUrl,
+                                                    tmpUserAgent, tmpContentDisposition,
+                                                    tmpMimeType, tmpReferer, tmpContentLength);
+                                        }
+
+                                    }
+                                })
+                        .setNegativeButton(res.getString(R.string.cancel), null).create()
+                        .show();
             }
         };
+
         mWebBackForwardListClient = new WebBackForwardListClient() {
             @Override
             public void onNewHistoryItem(WebHistoryItem item) {
